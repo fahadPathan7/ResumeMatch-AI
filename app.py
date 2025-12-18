@@ -18,16 +18,41 @@ sys.path.insert(0, BASE_DIR)
 
 # Verify src directory structure
 src_path = os.path.join(BASE_DIR, 'src')
-models_path = os.path.join(src_path, 'models')
 if not os.path.exists(src_path):
     st.error(f"Error: 'src' directory not found at {src_path}")
     st.error(f"Base directory: {BASE_DIR}")
     st.error(f"Files in base directory: {os.listdir(BASE_DIR) if os.path.exists(BASE_DIR) else 'N/A'}")
     st.stop()
 
-if not os.path.exists(models_path):
-    st.error(f"Error: 'src/models' directory not found at {models_path}")
-    st.error(f"Files in src directory: {os.listdir(src_path) if os.path.exists(src_path) else 'N/A'}")
+# Check for required subdirectories and provide helpful error if missing
+required_dirs = ['models', 'utils', 'processors', 'scoring', 'parsers']
+missing_dirs = []
+for dir_name in required_dirs:
+    dir_path = os.path.join(src_path, dir_name)
+    if not os.path.exists(dir_path):
+        missing_dirs.append(dir_name)
+
+if missing_dirs:
+    st.error("### Missing Required Directories")
+    st.error(f"The following directories are missing from the deployment: {', '.join(missing_dirs)}")
+    st.error("**This usually means these files weren't committed to git.**")
+    st.error("**Files in src directory:**")
+    try:
+        src_files = os.listdir(src_path)
+        st.code('\n'.join(src_files))
+    except:
+        st.error("Cannot list files")
+    st.error("**Solution:**")
+    st.markdown("""
+    1. Ensure all files are committed to git:
+       ```bash
+       git add src/models/
+       git commit -m "Add models directory"
+       git push
+       ```
+    2. Verify `.gitignore` is not excluding these files
+    3. Re-deploy on Streamlit Cloud
+    """)
     st.stop()
 
 # Import modules with detailed error handling

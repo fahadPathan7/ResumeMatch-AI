@@ -36,8 +36,8 @@ ENV/
 # Streamlit
 .streamlit/
 
-# Models (if cached locally)
-models/
+# Models (if cached locally) - only ignore top-level models directory
+/models/
 *.pkl
 *.h5
 *.pt
