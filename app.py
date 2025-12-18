@@ -10,17 +10,43 @@ import os
 # Get the directory where app.py is located (works on both local and Streamlit Cloud)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Ensure BASE_DIR is in Python path (insert at beginning for priority)
-if BASE_DIR not in sys.path:
-    sys.path.insert(0, BASE_DIR)
+# Remove BASE_DIR from path if it exists, then add it at the beginning
+# This ensures it has highest priority for imports
+if BASE_DIR in sys.path:
+    sys.path.remove(BASE_DIR)
+sys.path.insert(0, BASE_DIR)
 
-# Also try adding parent directory (for Streamlit Cloud scenarios)
-parent_dir = os.path.dirname(BASE_DIR)
-if parent_dir not in sys.path and parent_dir != BASE_DIR:
-    sys.path.insert(0, parent_dir)
+# Verify src directory structure
+src_path = os.path.join(BASE_DIR, 'src')
+models_path = os.path.join(src_path, 'models')
+if not os.path.exists(src_path):
+    st.error(f"Error: 'src' directory not found at {src_path}")
+    st.error(f"Base directory: {BASE_DIR}")
+    st.error(f"Files in base directory: {os.listdir(BASE_DIR) if os.path.exists(BASE_DIR) else 'N/A'}")
+    st.stop()
+
+if not os.path.exists(models_path):
+    st.error(f"Error: 'src/models' directory not found at {models_path}")
+    st.error(f"Files in src directory: {os.listdir(src_path) if os.path.exists(src_path) else 'N/A'}")
+    st.stop()
 
 # Import modules with detailed error handling
 try:
+    # Verify Python can find the module
+    import importlib.util
+    
+    # Check if src can be found as a package
+    src_spec = importlib.util.find_spec("src")
+    if src_spec is None or src_spec.origin is None:
+        st.error("Python cannot find 'src' package")
+        st.error(f"BASE_DIR: {BASE_DIR}")
+        st.error(f"Python path: {sys.path[:5]}")
+        st.error(f"src directory exists: {os.path.exists(src_path)}")
+        if os.path.exists(src_path):
+            st.error(f"src/__init__.py exists: {os.path.exists(os.path.join(src_path, '__init__.py'))}")
+        st.stop()
+    
+    # Now try the actual imports
     from src.utils.helpers import parse_document, get_file_type
     from src.processors.text_processor import TextProcessor
     from src.models.embedding_model import EmbeddingModel
