@@ -7,14 +7,22 @@ import streamlit as st
 import sys
 import os
 
-# Add src to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+# Add project root to path for proper imports
+# This works both locally and on Streamlit Cloud
+current_dir = os.path.dirname(os.path.abspath(__file__))
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
 
-from src.utils.helpers import parse_document, get_file_type
-from src.processors.text_processor import TextProcessor
-from src.models.embedding_model import EmbeddingModel
-from src.models.similarity_calculator import SimilarityCalculator
-from src.scoring.score_engine import ScoreEngine
+try:
+    from src.utils.helpers import parse_document, get_file_type
+    from src.processors.text_processor import TextProcessor
+    from src.models.embedding_model import EmbeddingModel
+    from src.models.similarity_calculator import SimilarityCalculator
+    from src.scoring.score_engine import ScoreEngine
+except ImportError as e:
+    st.error(f"Import error: {str(e)}")
+    st.error("Please ensure all dependencies are installed and the project structure is correct.")
+    st.stop()
 
 # Page configuration
 st.set_page_config(
