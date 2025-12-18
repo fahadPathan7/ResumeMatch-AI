@@ -47,8 +47,10 @@ ENV/
 data/
 *.pdf
 *.docx
-*.txt
 uploads/
+
+# Don't ignore requirements.txt
+!requirements.txt
 
 # OS
 .DS_Store
