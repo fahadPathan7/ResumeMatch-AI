@@ -122,3 +122,5 @@ cv-reviewer/
 - History of previous matches
 - Multi-language support
 - ATS compatibility check
+
+---

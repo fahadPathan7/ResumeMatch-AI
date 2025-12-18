@@ -7,12 +7,19 @@ import streamlit as st
 import sys
 import os
 
-# Add project root to path for proper imports
-# This works both locally and on Streamlit Cloud
-current_dir = os.path.dirname(os.path.abspath(__file__))
-if current_dir not in sys.path:
-    sys.path.insert(0, current_dir)
+# Get the directory where app.py is located (works on both local and Streamlit Cloud)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
+# Ensure BASE_DIR is in Python path (insert at beginning for priority)
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+
+# Also try adding parent directory (for Streamlit Cloud scenarios)
+parent_dir = os.path.dirname(BASE_DIR)
+if parent_dir not in sys.path and parent_dir != BASE_DIR:
+    sys.path.insert(0, parent_dir)
+
+# Import modules with detailed error handling
 try:
     from src.utils.helpers import parse_document, get_file_type
     from src.processors.text_processor import TextProcessor
@@ -20,8 +27,38 @@ try:
     from src.models.similarity_calculator import SimilarityCalculator
     from src.scoring.score_engine import ScoreEngine
 except ImportError as e:
-    st.error(f"Import error: {str(e)}")
-    st.error("Please ensure all dependencies are installed and the project structure is correct.")
+    import traceback
+    st.error("### Import Error")
+    st.error(f"**Error**: {str(e)}")
+    
+    # Debug information
+    debug_info = {
+        "Base Directory": BASE_DIR,
+        "Current Working Directory": os.getcwd(),
+        "File Location": os.path.abspath(__file__),
+        "Src Directory Exists": os.path.exists(os.path.join(BASE_DIR, 'src')),
+        "Python Path (first 5)": sys.path[:5]
+    }
+    
+    if os.path.exists(BASE_DIR):
+        try:
+            debug_info["Files in BASE_DIR"] = [f for f in os.listdir(BASE_DIR) if not f.startswith('.')]
+        except:
+            debug_info["Files in BASE_DIR"] = "Cannot list"
+    
+    st.error("**Debug Information:**")
+    for key, value in debug_info.items():
+        st.text(f"{key}: {value}")
+    
+    st.error("**Full Traceback:**")
+    st.code(traceback.format_exc())
+    st.error("**Troubleshooting:**")
+    st.markdown("""
+    1. Ensure `src/` directory exists in the project root
+    2. Check that all `__init__.py` files are present
+    3. Verify `requirements.txt` includes all dependencies
+    4. On Streamlit Cloud, ensure the repository structure matches local structure
+    """)
     st.stop()
 
 # Page configuration
