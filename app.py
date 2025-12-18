@@ -1,0 +1,269 @@
+"""
+ResumeMatch AI - Streamlit Application
+Main application file for CV matching against job descriptions
+"""
+
+import streamlit as st
+import sys
+import os
+
+# Add src to path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+
+from src.utils.helpers import parse_document, get_file_type
+from src.processors.text_processor import TextProcessor
+from src.models.embedding_model import EmbeddingModel
+from src.models.similarity_calculator import SimilarityCalculator
+from src.scoring.score_engine import ScoreEngine
+
+# Page configuration
+st.set_page_config(
+    page_title="ResumeMatch AI",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Initialize session state
+if 'model_loaded' not in st.session_state:
+    st.session_state.model_loaded = False
+if 'embedding_model' not in st.session_state:
+    st.session_state.embedding_model = None
+if 'similarity_calculator' not in st.session_state:
+    st.session_state.similarity_calculator = None
+if 'score_engine' not in st.session_state:
+    st.session_state.score_engine = None
+
+
+@st.cache_resource
+def load_models():
+    """Load and cache embedding model"""
+    try:
+        embedding_model = EmbeddingModel('sentence-transformers/all-MiniLM-L6-v2')
+        similarity_calculator = SimilarityCalculator(embedding_model)
+        score_engine = ScoreEngine(similarity_calculator)
+        return embedding_model, similarity_calculator, score_engine
+    except Exception as e:
+        st.error(f"Failed to load models: {str(e)}")
+        return None, None, None
+
+
+def main():
+    """Main application function"""
+    st.title("ResumeMatch AI")
+    st.markdown("### Match your CV against job descriptions using AI")
+    st.markdown("---")
+    
+    # Load models
+    with st.spinner("Loading AI models..."):
+        if not st.session_state.model_loaded:
+            embedding_model, similarity_calculator, score_engine = load_models()
+            if embedding_model:
+                st.session_state.embedding_model = embedding_model
+                st.session_state.similarity_calculator = similarity_calculator
+                st.session_state.score_engine = score_engine
+                st.session_state.model_loaded = True
+                st.success("Models loaded successfully!")
+            else:
+                st.error("Failed to load models. Please check your internet connection and try again.")
+                return
+    
+    # Sidebar
+    with st.sidebar:
+        st.header("Instructions")
+        st.markdown("""
+        1. **Upload your CV** (PDF, DOCX, or TXT)
+        2. **Enter or upload job description**
+        3. Click **Match CV** to get results
+        4. Review your match score and recommendations
+        """)
+        
+        st.markdown("---")
+        st.markdown("### Supported Formats")
+        st.markdown("- PDF (.pdf)")
+        st.markdown("- Word Document (.docx)")
+        st.markdown("- Text File (.txt)")
+        
+        st.markdown("---")
+        st.markdown("### About")
+        st.markdown("Developed by Fahad Pathan")
+    
+    # Main content area
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("Upload CV")
+        cv_file = st.file_uploader(
+            "Choose your CV file",
+            type=['pdf', 'docx', 'txt'],
+            help="Upload your CV in PDF, DOCX, or TXT format"
+        )
+        
+        if cv_file:
+            st.success(f"{cv_file.name} uploaded")
+            with st.expander("Preview CV"):
+                try:
+                    cv_text, _ = parse_document(cv_file.read(), cv_file.name)
+                    st.text_area("CV Content", cv_text[:500] + "..." if len(cv_text) > 500 else cv_text, height=200)
+                except Exception as e:
+                    st.error(f"Error reading CV: {str(e)}")
+    
+    with col2:
+        st.subheader("Job Description")
+        job_input_method = st.radio(
+            "Input method",
+            ["Text Input", "File Upload"],
+            horizontal=True
+        )
+        
+        job_text = ""
+        if job_input_method == "Text Input":
+            job_text = st.text_area(
+                "Enter job description",
+                height=300,
+                placeholder="Paste the job description here..."
+            )
+        else:
+            job_file = st.file_uploader(
+                "Upload job description",
+                type=['pdf', 'docx', 'txt'],
+                help="Upload job description file"
+            )
+            if job_file:
+                try:
+                    job_text, _ = parse_document(job_file.read(), job_file.name)
+                    st.success(f"{job_file.name} uploaded")
+                except Exception as e:
+                    st.error(f"Error reading job description: {str(e)}")
+    
+    # Process button
+    st.markdown("---")
+    process_button = st.button("Match CV", type="primary", use_container_width=True)
+    
+    if process_button:
+        if not cv_file:
+            st.error("Please upload a CV file")
+            return
+        
+        if not job_text.strip():
+            st.error("Please provide a job description")
+            return
+        
+        # Process the matching
+        with st.spinner("Processing... This may take a few seconds"):
+            try:
+                # Parse CV
+                cv_file.seek(0)  # Reset file pointer
+                cv_text, _ = parse_document(cv_file.read(), cv_file.name)
+                
+                if not cv_text.strip():
+                    st.error("Could not extract text from CV. Please check the file format.")
+                    return
+                
+                # Process texts
+                text_processor = TextProcessor()
+                cv_cleaned = text_processor.clean_text(cv_text)
+                job_cleaned = text_processor.clean_text(job_text)
+                
+                # Identify sections
+                cv_sections = text_processor.identify_sections(cv_cleaned)
+                job_sections = text_processor.identify_sections(job_cleaned)
+                
+                # Calculate scores
+                score_engine = st.session_state.score_engine
+                results = score_engine.calculate_match_score(
+                    cv_cleaned, job_cleaned, cv_sections, job_sections
+                )
+                
+                # Display results
+                st.markdown("---")
+                st.header("Match Results")
+                
+                # Overall score
+                col1, col2, col3 = st.columns([1, 2, 1])
+                with col2:
+                    score = results['final_score']
+                    interpretation = score_engine.get_score_interpretation(score)
+                    
+                    st.metric(
+                        "Overall Match Score",
+                        f"{score:.1f}%",
+                        delta=interpretation
+                    )
+                    st.markdown(f"### {interpretation}")
+                
+                # Score breakdown
+                st.subheader("Score Breakdown")
+                breakdown_cols = st.columns(4)
+                
+                with breakdown_cols[0]:
+                    st.metric("Overall Similarity", f"{results['overall_similarity']:.1f}%")
+                with breakdown_cols[1]:
+                    st.metric("Skills Match", f"{results['skills_match']:.1f}%")
+                with breakdown_cols[2]:
+                    st.metric("Experience Match", f"{results['experience_match']:.1f}%")
+                with breakdown_cols[3]:
+                    st.metric("Education Match", f"{results['education_match']:.1f}%")
+                
+                # Visual progress bars
+                st.progress(results['overall_similarity'] / 100, text="Overall Similarity")
+                st.progress(results['skills_match'] / 100, text="Skills Match")
+                st.progress(results['experience_match'] / 100, text="Experience Match")
+                st.progress(results['education_match'] / 100, text="Education Match")
+                
+                # Skills analysis
+                st.subheader("Skills Analysis")
+                skills_col1, skills_col2 = st.columns(2)
+                
+                with skills_col1:
+                    st.markdown("**Matched Skills**")
+                    if results['matched_skills']:
+                        for skill in results['matched_skills'][:20]:  # Show first 20
+                            st.markdown(f"- {skill}")
+                    else:
+                        st.info("No skills matched")
+                
+                with skills_col2:
+                    st.markdown("**Missing Skills**")
+                    if results['missing_skills']:
+                        for skill in results['missing_skills'][:20]:  # Show first 20
+                            st.markdown(f"- {skill}")
+                    else:
+                        st.success("All required skills found!")
+                
+                # Recommendations
+                st.subheader("Recommendations")
+                recommendations = []
+                
+                if results['skills_match'] < 50:
+                    recommendations.append("**Improve Skills Match**: Consider highlighting more relevant skills from the job description in your CV.")
+                
+                if results['experience_match'] < 50:
+                    recommendations.append("**Experience Gap**: Ensure your experience section clearly demonstrates relevant work history.")
+                
+                if results['missing_skills']:
+                    recommendations.append(f"**Add Missing Skills**: Consider adding or highlighting these skills: {', '.join(results['missing_skills'][:5])}")
+                
+                if results['overall_similarity'] < 60:
+                    recommendations.append("**Improve Overall Match**: Review the job description keywords and ensure they appear in your CV.")
+                
+                if not recommendations:
+                    recommendations.append("**Great Job!** Your CV is well-matched to this position.")
+                
+                for rec in recommendations:
+                    st.markdown(rec)
+                
+                # Section similarities
+                if results['section_similarities']:
+                    st.subheader("Section-wise Similarities")
+                    for section, similarity in results['section_similarities'].items():
+                        st.markdown(f"**{section.title()}**: {similarity:.1f}%")
+                        st.progress(similarity / 100)
+                
+            except Exception as e:
+                st.error(f"Error processing: {str(e)}")
+                st.exception(e)
+
+
+if __name__ == "__main__":
+    main()
+
